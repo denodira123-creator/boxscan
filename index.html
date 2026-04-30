@@ -381,7 +381,7 @@ function renderDrawer() {
       </div>
       <div class="qr-section">
         <div class="section-title" style="margin-bottom:10px">QR code à coller sur la boîte</div>
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(selectedId)}&margin=2" width="140" height="140" alt="QR code" onerror="this.style.display='none'">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(selectedId)}&margin=2" width="140" height="140" alt="QR code" onerror="this.style.display='none'">
         <div class="qr-id">${selectedId}</div>
         <div class="hint">📄 Imprimez ce QR code et collez-le sur la boîte physique. En le scannant, tout le monde verra son contenu.</div>
       </div>
