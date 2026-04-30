@@ -461,8 +461,13 @@ async function startScanner() {
   scanning = true;
   renderScanContent();
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    const v = document.getElementById('sv');
+    stream = await navigator.mediaDevices.getUserMedia({
+  video: {
+    facingMode: { exact: "environment" },
+    width: { ideal: 1280 },
+    height: { ideal: 1280 }
+  }
+});
     if (v) { v.srcObject = stream; await v.play(); }
   } catch(e) {
     scanning = false; stream = null;
@@ -484,8 +489,16 @@ function scanLoop() {
   c.width = v.videoWidth; c.height = v.videoHeight;
   const ctx = c.getContext('2d');
   ctx.drawImage(v, 0, 0);
-  const img = ctx.getImageData(0,0,c.width,c.height);
-  const code = window.jsQR(img.data, img.width, img.height);
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  for (let i = 0; i < img.data.length; i += 4) {
+  const avg = (img.data[i] + img.data[i+1] + img.data[i+2]) / 3;
+  const val = avg > 128 ? 255 : 0;
+  img.data[i] = img.data[i+1] = img.data[i+2] = val;
+}
+
+const code = window.jsQR(img.data, img.width, img.height, {
+  inversionAttempts: "attemptBoth"
+});
   console.log("scan en cours...");
   if (code) {
     console.log("QR détecté :", code.data);
