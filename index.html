@@ -486,6 +486,7 @@ function scanLoop() {
   ctx.drawImage(v, 0, 0);
   const img = ctx.getImageData(0,0,c.width,c.height);
   const code = window.jsQR(img.data, img.width, img.height);
+  console.log("scan en cours...");
   if (code) {
     stopScanner();
     const cleanId = code.data.trim();
