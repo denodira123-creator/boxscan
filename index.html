@@ -488,8 +488,9 @@ function scanLoop() {
   const code = window.jsQR(img.data, img.width, img.height);
   console.log("scan en cours...");
   if (code) {
-    stopScanner();
+    console.log("QR détecté :", code.data);
     const cleanId = code.data.trim();
+    stopScanner();
     const found = boxes[cleanId];
     showScanResult(found ? found : null, found ? 'found' : 'not_found', cleanId);
   } else {
