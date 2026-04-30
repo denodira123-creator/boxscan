@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BoxScan</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BoxScan">
+<meta name="theme-color" content="#0F6E56">
+<link rel="apple-touch-icon" href="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=BoxScan&bgcolor=0F6E56&color=ffffff&margin=20">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --teal:#0F6E56;--teal-dark:#085041;--teal-light:#E1F5EE;
+  --bg:#F7F6F2;--card:#FFFFFF;--border:#E8E6E0;--border2:#D0CEC8;
+  --text:#1A1A18;--text2:#6B6960;--text3:#A8A59E;
+  --amber:#BA7517;--amber-bg:#FEF3DC;
+  --red:#C0392B;--red-bg:#FDECEA;
+  --green:#1D9E75;--green-bg:#E1F5EE;
+  --r:10px;--rl:14px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:16px;-webkit-font-smoothing:antialiased}
+.app{display:flex;flex-direction:column;height:100%;max-width:600px;margin:0 auto}
+/* Topbar */
+.topbar{background:var(--card);border-bottom:1px solid var(--border);padding:env(safe-area-inset-top) 0 0;flex-shrink:0}
+.topbar-inner{padding:14px 16px 0;display:flex;align-items:center;gap:8px}
+.logo{width:28px;height:28px;background:var(--teal);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo svg{width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.app-title{font-size:18px;font-weight:700;letter-spacing:-0.3px;color:var(--text)}
+.app-title span{color:var(--teal)}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);margin-left:auto;flex-shrink:0;transition:background 0.3s}
+.sync-dot.offline{background:var(--text3)}
+.sync-dot.syncing{background:var(--amber);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+/* Tabs */
+.tabs{display:flex;padding:0 4px}
+.tab{flex:1;padding:12px 4px 10px;font-size:13px;font-weight:500;border:none;background:none;color:var(--text2);cursor:pointer;border-bottom:2.5px solid transparent;transition:all 0.15s;font-family:inherit}
+.tab.active{color:var(--teal);border-bottom-color:var(--teal)}
+/* Content */
+.content{flex:1;overflow-y:auto;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+/* Loading */
+.loader{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:12px;color:var(--text2);font-size:14px}
+.spinner{width:28px;height:28px;border:2.5px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin 0.7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:12px;text-align:center}
+.stat-n{font-size:22px;font-weight:700;color:var(--teal);line-height:1}
+.stat-l{font-size:11px;color:var(--text2);margin-top:3px}
+/* Search row */
+.search-row{display:flex;gap:8px;margin-bottom:14px}
+.search-wrap{flex:1;position:relative}
+.search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--text3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+input[type=text],input[type=search],textarea{font-family:inherit}
+.search-input{width:100%;padding:10px 12px 10px 36px;border:1px solid var(--border);border-radius:var(--r);font-size:14px;background:var(--card);color:var(--text);outline:none;-webkit-appearance:none}
+.search-input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(15,110,86,0.1)}
+.filter-sel{padding:10px 10px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;background:var(--card);color:var(--text);outline:none;-webkit-appearance:none;cursor:pointer;font-family:inherit}
+.filter-sel:focus{border-color:var(--teal)}
+/* Grid */
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:400px){.grid{grid-template-columns:repeat(2,1fr)}}
+/* Box card */
+.box-card{background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px;cursor:pointer;transition:all 0.15s;position:relative;overflow:hidden;user-select:none}
+.box-card:active{transform:scale(0.97);background:#F9F8F5}
+.box-accent{position:absolute;top:0;left:0;width:3px;height:100%;background:var(--teal);opacity:0.6}
+.box-emoji{font-size:28px;margin-bottom:8px;line-height:1.2}
+.box-name{font-size:14px;font-weight:600;margin-bottom:5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.box-loc{font-size:12px;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:3px}
+.box-loc svg{width:11px;height:11px;stroke:var(--text3);fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.box-count{display:inline-block;font-size:11px;font-weight:600;background:var(--teal-light);color:var(--teal-dark);padding:3px 9px;border-radius:20px}
+/* Empty */
+.empty{text-align:center;padding:48px 24px;color:var(--text2)}
+.empty-icon{font-size:44px;opacity:0.3;margin-bottom:12px}
+.empty p{font-size:14px;line-height:1.5}
+/* Modal overlay */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;display:flex;align-items:flex-end;justify-content:center;padding:0;animation:fadeIn 0.2s}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.drawer{background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:88vh;overflow-y:auto;padding:0 0 env(safe-area-inset-bottom);animation:slideUp 0.25s ease-out}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.drawer-handle{width:36px;height:4px;background:var(--border2);border-radius:4px;margin:12px auto 0}
+.drawer-header{padding:16px 16px 12px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)}
+.drawer-emoji{font-size:30px;line-height:1}
+.drawer-info{flex:1;min-width:0}
+.drawer-name{font-size:17px;font-weight:700;color:var(--text);margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drawer-loc{font-size:13px;color:var(--text2)}
+.drawer-body{padding:16px}
+.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text2);margin-bottom:10px}
+.items-list{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.item-row{display:flex;align-items:center;gap:10px;background:#F9F8F5;border-radius:8px;padding:10px 12px}
+.item-row span{flex:1;font-size:14px;color:var(--text)}
+.item-del{background:none;border:none;cursor:pointer;padding:4px;color:var(--text3);display:flex;align-items:center;border-radius:6px;transition:all 0.1s;flex-shrink:0}
+.item-del:active{background:var(--red-bg);color:var(--red)}
+.item-del svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.add-row{display:flex;gap:8px}
+.add-input{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:14px;background:var(--card);color:var(--text);outline:none;-webkit-appearance:none}
+.add-input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(15,110,86,0.1)}
+.btn-teal{background:var(--teal);color:#fff;border:none;border-radius:var(--r);padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;transition:opacity 0.1s;-webkit-appearance:none}
+.btn-teal:active{opacity:0.8}
+.btn-teal:disabled{opacity:0.4;cursor:default}
+/* QR section in drawer */
+.qr-section{background:#F9F8F5;border-radius:var(--r);padding:16px;text-align:center;margin-top:16px}
+.qr-section img{border-radius:8px;max-width:140px;display:block;margin:0 auto 8px}
+.qr-id{font-size:10px;color:var(--text3);font-family:monospace;word-break:break-all;margin-bottom:8px}
+.hint{font-size:12px;color:var(--amber);background:var(--amber-bg);border-radius:8px;padding:8px 12px;text-align:left}
+/* Delete button */
+.btn-danger{background:none;border:1px solid var(--border);color:var(--red);border-radius:var(--r);padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;margin-top:16px;width:100%;text-align:center;transition:all 0.1s;-webkit-appearance:none}
+.btn-danger:active{background:var(--red-bg);border-color:var(--red)}
+/* Scanner tab */
+.scanner-page{display:flex;flex-direction:column;align-items:center;gap:20px}
+.scan-prompt{text-align:center}
+.scan-prompt h2{font-size:20px;font-weight:700;margin-bottom:6px}
+.scan-prompt p{font-size:14px;color:var(--text2);line-height:1.5}
+.video-box{width:100%;max-width:320px;aspect-ratio:1;border-radius:16px;overflow:hidden;position:relative;background:#000;border:2px solid var(--teal)}
+.video-box video{width:100%;height:100%;object-fit:cover}
+.video-box canvas{display:none}
+.corners{position:absolute;inset:0;pointer-events:none}
+.corner{position:absolute;width:22px;height:22px;border-color:var(--teal);border-style:solid}
+.corner.tl{top:10px;left:10px;border-width:3px 0 0 3px;border-radius:4px 0 0 0}
+.corner.tr{top:10px;right:10px;border-width:3px 3px 0 0;border-radius:0 4px 0 0}
+.corner.bl{bottom:10px;left:10px;border-width:0 0 3px 3px;border-radius:0 0 0 4px}
+.corner.br{bottom:10px;right:10px;border-width:0 3px 3px 0;border-radius:0 0 4px 0}
+.scan-line{position:absolute;left:10px;right:10px;height:2px;background:var(--teal);opacity:0.8;animation:scanline 2s ease-in-out infinite}
+@keyframes scanline{0%{top:15%}50%{top:82%}100%{top:15%}}
+.btn-scan{background:var(--teal);color:#fff;border:none;border-radius:14px;padding:14px 32px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:8px;width:100%;max-width:280px;justify-content:center;transition:opacity 0.1s;-webkit-appearance:none}
+.btn-scan:active{opacity:0.8}
+.btn-outline{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:10px 20px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;color:var(--text);transition:all 0.1s;-webkit-appearance:none}
+.btn-outline:active{background:#F0EFE8}
+/* Scan result */
+.result-card{width:100%;max-width:380px;background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:20px;text-align:center}
+.result-card.found{border-color:var(--green)}
+.result-card.notfound{border-color:var(--border)}
+.result-emoji{font-size:36px;margin-bottom:8px}
+.result-name{font-size:18px;font-weight:700;margin-bottom:4px}
+.result-loc{font-size:13px;color:var(--text2);margin-bottom:14px}
+.result-items{background:#F9F8F5;border-radius:10px;padding:12px;margin:12px 0;text-align:left}
+.result-item{font-size:13px;padding:4px 0;border-bottom:1px solid var(--border);color:var(--text)}
+.result-item:last-child{border:none}
+.result-btns{display:flex;gap:8px;margin-top:14px}
+.result-btns button{flex:1}
+/* Manual input */
+.manual-section{width:100%;max-width:320px}
+.manual-label{font-size:12px;color:var(--text2);margin-bottom:6px;text-align:center}
+.manual-row{display:flex;gap:8px}
+.manual-input{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;font-family:monospace;background:var(--card);color:var(--text);outline:none;-webkit-appearance:none}
+.manual-input:focus{border-color:var(--teal)}
+/* Create form */
+.form-section{margin-bottom:20px}
+.form-label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text2);margin-bottom:7px}
+.form-input{width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:var(--r);font-size:15px;background:var(--card);color:var(--text);outline:none;-webkit-appearance:none;font-family:inherit}
+.form-input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(15,110,86,0.1)}
+.emoji-grid{display:flex;flex-wrap:wrap;gap:8px}
+.emoji-btn{width:42px;height:42px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);cursor:pointer;font-size:22px;display:flex;align-items:center;justify-content:center;transition:all 0.1s;-webkit-appearance:none}
+.emoji-btn.sel{border-color:var(--teal);border-width:2px;background:var(--teal-light)}
+.emoji-btn:active{transform:scale(0.92)}
+/* Success screen */
+.success-screen{text-align:center;padding:8px 0}
+.success-icon{width:52px;height:52px;background:var(--teal-light);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+.success-icon svg{width:26px;height:26px;stroke:var(--teal);fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.success-title{font-size:18px;font-weight:700;margin-bottom:6px}
+.success-sub{font-size:14px;color:var(--text2);margin-bottom:20px}
+.qr-print-block{background:#F9F8F5;border-radius:var(--rl);padding:16px;margin:0 auto 16px;max-width:280px}
+.qr-print-block img{display:block;margin:0 auto 10px;border-radius:8px}
+.success-btns{display:flex;flex-direction:column;gap:10px;max-width:280px;margin:0 auto}
+/* Firestore connection error */
+.error-banner{background:var(--red-bg);color:var(--red);border-radius:var(--r);padding:12px 14px;font-size:13px;margin-bottom:16px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="logo">
+        <svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      </div>
+      <span class="app-title">Box<span>Scan</span></span>
+      <span class="sync-dot offline" id="sync-dot" title="Connexion"></span>
+    </div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('boxes')" id="tab-boxes">📦 Mes boîtes</button>
+      <button class="tab" onclick="switchTab('scan')" id="tab-scan">📷 Scanner</button>
+      <button class="tab" onclick="switchTab('new')" id="tab-new">➕ Créer</button>
+    </div>
+  </div>
+  <div class="content" id="content">
+    <div class="loader"><div class="spinner"></div>Connexion…</div>
+  </div>
+</div>
+
+<!-- Drawer overlay -->
+<div class="overlay" id="overlay" style="display:none" onclick="handleOverlayClick(event)">
+  <div class="drawer" id="drawer"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  COLLE TA CONFIG FIREBASE ICI  (remplace chaque "...")
+// ═══════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey:            "...",
+  authDomain:        "...",
+  projectId:         "...",
+  storageBucket:     "...",
+  messagingSenderId: "...",
+  appId:             "..."
+};
+// ═══════════════════════════════════════════════════
+
+const EMOJIS = ['📦','🗃️','🧳','📚','🔧','👕','🖼️','🧸','💊','🎮','🏠','🌿','🍳','🧴','📷','🎵','🔑','🎒'];
+const LOCS   = ['Garage','Cave','Grenier','Chambre','Salon','Bureau','Cuisine','Couloir','Débarras','Entrée'];
+
+let db, boxes = {}, currentTab = 'boxes', selectedId = null;
+let scanning = false, stream = null, animFrame = null;
+let newEmoji = '📦', newItems = [], firebaseOk = false;
+
+// Init Firebase
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  db.enablePersistence().catch(() => {});
+  db.collection('boxes').onSnapshot(snap => {
+    boxes = {};
+    snap.forEach(doc => { boxes[doc.id] = { id: doc.id, ...doc.data() }; });
+    setSync(true);
+    renderCurrent();
+  }, err => {
+    console.error(err);
+    setSync(false);
+    renderCurrent();
+  });
+  firebaseOk = true;
+} catch(e) {
+  console.error('Firebase config manquante', e);
+  firebaseOk = false;
+  renderCurrent();
+}
+
+function setSync(ok) {
+  const dot = document.getElementById('sync-dot');
+  if (!dot) return;
+  dot.className = 'sync-dot ' + (ok ? '' : 'offline');
+}
+
+// ── NAVIGATION ──────────────────────────────────────
+function switchTab(tab) {
+  if (scanning) stopScanner();
+  currentTab = tab;
+  selectedId = null;
+  ['boxes','scan','new'].forEach(t => {
+    document.getElementById('tab-'+t).className = 'tab' + (t===tab?' active':'');
+  });
+  if (tab==='new') { newItems=[]; newEmoji='📦'; }
+  renderCurrent();
+}
+
+function renderCurrent() {
+  const c = document.getElementById('content');
+  if (!c) return;
+  if (!firebaseOk) {
+    c.innerHTML = `<div class="error-banner">⚠️ Firebase non configuré. Ouvre ce fichier et colle ta config Firebase en haut du fichier dans la section prévue.</div>`;
+    return;
+  }
+  if (currentTab==='boxes') renderBoxes(c);
+  else if (currentTab==='scan') renderScan(c);
+  else renderCreate(c);
+}
+
+// ── BOÎTES ──────────────────────────────────────────
+function renderBoxes(c) {
+  const all = Object.values(boxes);
+  const locs = [...new Set(all.map(b=>b.location).filter(Boolean))].sort();
+  const q = (document.getElementById('sq')?.value||'').toLowerCase();
+  const lf = document.getElementById('lf')?.value||'';
+  const filtered = all.filter(b => {
+    const ms = !q || b.name.toLowerCase().includes(q) || (b.items||[]).some(i=>i.toLowerCase().includes(q));
+    const ml = !lf || b.location===lf;
+    return ms && ml;
+  }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+
+  const totalItems = all.reduce((n,b)=>n+(b.items||[]).length,0);
+
+  c.innerHTML = `
+    <div class="stats">
+      <div class="stat"><div class="stat-n">${all.length}</div><div class="stat-l">Boîtes</div></div>
+      <div class="stat"><div class="stat-n">${totalItems}</div><div class="stat-l">Objets</div></div>
+      <div class="stat"><div class="stat-n">${locs.length}</div><div class="stat-l">Endroits</div></div>
+    </div>
+    <div class="search-row">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input class="search-input" id="sq" placeholder="Boîte ou objet…" value="${h(q)}" oninput="renderBoxesOnly()">
+      </div>
+      <select class="filter-sel" id="lf" onchange="renderBoxesOnly()">
+        <option value="">Tous</option>
+        ${locs.map(l=>`<option value="${h(l)}"${lf===l?' selected':''}>${h(l)}</option>`).join('')}
+      </select>
+    </div>
+    <div id="grid-area"></div>`;
+  renderGrid(filtered);
+}
+
+function renderBoxesOnly() {
+  const c = document.getElementById('content');
+  if (!c||currentTab!=='boxes') return;
+  const all = Object.values(boxes);
+  const q = (document.getElementById('sq')?.value||'').toLowerCase();
+  const lf = document.getElementById('lf')?.value||'';
+  const filtered = all.filter(b => {
+    const ms = !q || b.name.toLowerCase().includes(q) || (b.items||[]).some(i=>i.toLowerCase().includes(q));
+    const ml = !lf || b.location===lf;
+    return ms && ml;
+  }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  renderGrid(filtered);
+}
+
+function renderGrid(filtered) {
+  const el = document.getElementById('grid-area');
+  if (!el) return;
+  if (!filtered.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📦</div><p>${Object.keys(boxes).length===0?'Aucune boîte encore.<br>Appuyez sur ➕ Créer pour commencer !':'Aucun résultat.'}</p></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="grid">${filtered.map(b=>`
+    <div class="box-card" onclick="openBox('${b.id}')">
+      <div class="box-accent"></div>
+      <div class="box-emoji">${b.emoji||'📦'}</div>
+      <div class="box-name">${h(b.name)}</div>
+      ${b.location?`<div class="box-loc"><svg viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>${h(b.location)}</div>`:''}
+      <span class="box-count">${(b.items||[]).length} objet${(b.items||[]).length!==1?'s':''}</span>
+    </div>`).join('')}</div>`;
+}
+
+// ── DRAWER ──────────────────────────────────────────
+function openBox(id) {
+  selectedId = id;
+  document.getElementById('overlay').style.display='flex';
+  renderDrawer();
+}
+
+function handleOverlayClick(e) {
+  if (e.target===document.getElementById('overlay')) closeDrawer();
+}
+
+function closeDrawer() {
+  document.getElementById('overlay').style.display='none';
+  selectedId = null;
+}
+
+function renderDrawer() {
+  const box = boxes[selectedId];
+  if (!box) { closeDrawer(); return; }
+  const d = document.getElementById('drawer');
+  d.innerHTML = `
+    <div class="drawer-handle"></div>
+    <div class="drawer-header">
+      <div class="drawer-emoji">${box.emoji||'📦'}</div>
+      <div class="drawer-info">
+        <div class="drawer-name">${h(box.name)}</div>
+        ${box.location?`<div class="drawer-loc">📍 ${h(box.location)}</div>`:''}
+      </div>
+    </div>
+    <div class="drawer-body">
+      <div class="section-title">Contenu (${(box.items||[]).length} objet${(box.items||[]).length!==1?'s':''})</div>
+      <div class="items-list" id="di">
+        ${!(box.items||[]).length?'<p style="font-size:13px;color:var(--text3);padding:4px 0">Aucun objet pour l\'instant</p>':''}
+        ${(box.items||[]).map((item,i)=>`
+          <div class="item-row">
+            <span>${h(item)}</span>
+            <button class="item-del" onclick="removeItem('${selectedId}','${h(item).replace(/'/g,"\\'")}')">
+              <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>`).join('')}
+      </div>
+      <div class="add-row">
+        <input class="add-input" id="di-input" placeholder="Ajouter un objet…" onkeydown="if(event.key==='Enter')addItem()">
+        <button class="btn-teal" onclick="addItem()">Ajouter</button>
+      </div>
+      <div class="qr-section">
+        <div class="section-title" style="margin-bottom:10px">QR code à coller sur la boîte</div>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(selectedId)}&margin=2" width="140" height="140" alt="QR code" onerror="this.style.display='none'">
+        <div class="qr-id">${selectedId}</div>
+        <div class="hint">📄 Imprimez ce QR code et collez-le sur la boîte physique. En le scannant, tout le monde verra son contenu.</div>
+      </div>
+      <button class="btn-danger" onclick="deleteBox('${selectedId}')">🗑 Supprimer cette boîte</button>
+    </div>`;
+}
+
+async function addItem() {
+  const input = document.getElementById('di-input');
+  const val = input?.value.trim();
+  if (!val || !selectedId) return;
+  input.value = '';
+  try {
+    await db.collection('boxes').doc(selectedId).update({
+      items: firebase.firestore.FieldValue.arrayUnion(val)
+    });
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+async function removeItem(boxId, item) {
+  try {
+    await db.collection('boxes').doc(boxId).update({
+      items: firebase.firestore.FieldValue.arrayRemove(item)
+    });
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+async function deleteBox(id) {
+  if (!confirm('Supprimer définitivement cette boîte ?')) return;
+  closeDrawer();
+  try { await db.collection('boxes').doc(id).delete(); } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+// ── SCANNER ─────────────────────────────────────────
+function renderScan(c) {
+  c.innerHTML = `<div class="scanner-page" id="scan-page"></div>`;
+  renderScanContent();
+}
+
+function renderScanContent() {
+  const page = document.getElementById('scan-page');
+  if (!page) return;
+  if (scanning) {
+    page.innerHTML = `
+      <div class="scan-prompt"><h2>Scanner une boîte</h2><p>Pointez la caméra sur le QR code</p></div>
+      <div class="video-box">
+        <video id="sv" autoplay playsinline muted></video>
+        <canvas id="sc"></canvas>
+        <div class="corners">
+          <div class="corner tl"></div><div class="corner tr"></div>
+          <div class="corner bl"></div><div class="corner br"></div>
+        </div>
+        <div class="scan-line"></div>
+      </div>
+      <button class="btn-outline" onclick="stopScanner()">Annuler</button>`;
+    const v = document.getElementById('sv');
+    if (v && stream) { v.srcObject = stream; v.play(); }
+    scanLoop();
+    return;
+  }
+  page.innerHTML = `
+    <div class="scan-prompt"><h2>📷 Scanner</h2><p>Scannez le QR code collé sur une boîte pour voir son contenu instantanément.</p></div>
+    <button class="btn-scan" onclick="startScanner()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect width="7" height="7" x="7" y="7" rx="1"/></svg>
+      Lancer le scanner
+    </button>
+    <div class="manual-section">
+      <div class="manual-label">— ou entrez l'identifiant manuellement —</div>
+      <div class="manual-row">
+        <input class="manual-input" id="mid" placeholder="Identifiant boîte…" onkeydown="if(event.key==='Enter')manualLookup()">
+        <button class="btn-teal" onclick="manualLookup()">OK</button>
+      </div>
+    </div>`;
+}
+
+async function startScanner() {
+  scanning = true;
+  renderScanContent();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const v = document.getElementById('sv');
+    if (v) { v.srcObject = stream; await v.play(); }
+  } catch(e) {
+    scanning = false; stream = null;
+    showScanResult(null, 'camera_error');
+  }
+}
+
+function stopScanner() {
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  if (stream) { stream.getTracks().forEach(t=>t.stop()); stream = null; }
+  scanning = false;
+  renderScanContent();
+}
+
+function scanLoop() {
+  const v = document.getElementById('sv'), c = document.getElementById('sc');
+  if (!v || !c || !window.jsQR) { animFrame = requestAnimationFrame(scanLoop); return; }
+  if (v.readyState < v.HAVE_ENOUGH_DATA) { animFrame = requestAnimationFrame(scanLoop); return; }
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(v, 0, 0);
+  const img = ctx.getImageData(0,0,c.width,c.height);
+  const code = window.jsQR(img.data, img.width, img.height);
+  if (code) {
+    stopScanner();
+    const found = boxes[code.data];
+    showScanResult(found ? found : null, found ? 'found' : 'not_found', code.data);
+  } else {
+    animFrame = requestAnimationFrame(scanLoop);
+  }
+}
+
+function manualLookup() {
+  const id = document.getElementById('mid')?.value.trim();
+  if (!id) return;
+  const found = boxes[id];
+  showScanResult(found||null, found?'found':'not_found', id);
+}
+
+function showScanResult(box, status, rawId) {
+  const page = document.getElementById('scan-page');
+  if (!page) return;
+  if (status === 'camera_error') {
+    page.innerHTML = `
+      <div class="result-card">
+        <div class="result-emoji">⚠️</div>
+        <div class="result-name">Caméra inaccessible</div>
+        <div class="result-loc">Vérifiez les permissions caméra dans Réglages.</div>
+        <button class="btn-outline" onclick="renderScanContent()" style="margin-top:14px;width:100%">Réessayer</button>
+      </div>
+      <div class="manual-section">
+        <div class="manual-label">— Entrez l'identifiant manuellement —</div>
+        <div class="manual-row">
+          <input class="manual-input" id="mid" placeholder="Identifiant boîte…" onkeydown="if(event.key==='Enter')manualLookup()">
+          <button class="btn-teal" onclick="manualLookup()">OK</button>
+        </div>
+      </div>`;
+    return;
+  }
+  if (status === 'not_found') {
+    page.innerHTML = `
+      <div class="result-card notfound">
+        <div class="result-emoji">❓</div>
+        <div class="result-name">Boîte introuvable</div>
+        <div class="result-loc" style="font-size:12px;font-family:monospace">${h(rawId||'')}</div>
+        <button class="btn-outline" onclick="renderScanContent()" style="margin-top:14px;width:100%">Rescanner</button>
+      </div>`;
+    return;
+  }
+  const items = box.items||[];
+  page.innerHTML = `
+    <div class="result-card found">
+      <div class="result-emoji">${box.emoji||'📦'}</div>
+      <div class="result-name">${h(box.name)}</div>
+      ${box.location?`<div class="result-loc">📍 ${h(box.location)}</div>`:''}
+      <div class="result-items">
+        ${!items.length?'<div class="result-item" style="color:var(--text3)">Boîte vide</div>':items.map(i=>`<div class="result-item">${h(i)}</div>`).join('')}
+      </div>
+      <div class="result-btns">
+        <button class="btn-outline" onclick="renderScanContent()">Rescanner</button>
+        <button class="btn-teal" onclick="switchTab('boxes');openBox('${box.id}')">Ouvrir</button>
+      </div>
+    </div>`;
+}
+
+// ── CRÉER ────────────────────────────────────────────
+function renderCreate(c) {
+  c.innerHTML = `
+    <div class="form-section">
+      <label class="form-label">Emoji</label>
+      <div class="emoji-grid" id="eg">
+        ${EMOJIS.map(e=>`<button class="emoji-btn${newEmoji===e?' sel':''}" onclick="pickEmoji('${e}')">${e}</button>`).join('')}
+      </div>
+    </div>
+    <div class="form-section">
+      <label class="form-label">Nom de la boîte *</label>
+      <input class="form-input" id="fn" placeholder="ex : Outils, Livres d'été…" oninput="">
+    </div>
+    <div class="form-section">
+      <label class="form-label">Emplacement</label>
+      <select class="form-input" id="fl" style="cursor:pointer">
+        <option value="">— Choisir —</option>
+        ${LOCS.map(l=>`<option value="${h(l)}">${h(l)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-section">
+      <label class="form-label">Contenu (optionnel)</label>
+      <div class="items-list" id="nil"></div>
+      <div class="add-row">
+        <input class="add-input" id="ni" placeholder="Ajouter un objet…" onkeydown="if(event.key==='Enter')addNewItem()">
+        <button class="btn-outline" onclick="addNewItem()">Ajouter</button>
+      </div>
+    </div>
+    <button class="btn-teal" style="width:100%;padding:14px;font-size:16px;border-radius:14px" onclick="createBox()">
+      Créer la boîte &amp; générer le QR code
+    </button>`;
+  renderNewItems();
+}
+
+function pickEmoji(e) {
+  newEmoji = e;
+  document.querySelectorAll('.emoji-btn').forEach(b=>b.classList.toggle('sel',b.textContent===e));
+}
+
+function addNewItem() {
+  const inp = document.getElementById('ni');
+  const val = inp?.value.trim();
+  if (!val) return;
+  newItems.push(val);
+  inp.value = '';
+  renderNewItems();
+}
+
+function removeNewItem(i) {
+  newItems.splice(i,1);
+  renderNewItems();
+}
+
+function renderNewItems() {
+  const el = document.getElementById('nil');
+  if (!el) return;
+  el.innerHTML = newItems.map((item,i)=>`
+    <div class="item-row">
+      <span>${h(item)}</span>
+      <button class="item-del" onclick="removeNewItem(${i})">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>`).join('');
+}
+
+async function createBox() {
+  const name = document.getElementById('fn')?.value.trim();
+  if (!name) { document.getElementById('fn')?.focus(); return; }
+  const location = document.getElementById('fl')?.value||'';
+  const btn = document.querySelector('.btn-teal');
+  if (btn) { btn.disabled=true; btn.textContent='Création…'; }
+  try {
+    const ref = await db.collection('boxes').add({
+      name, location, emoji: newEmoji,
+      items: [...newItems],
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showCreateSuccess({ id: ref.id, name, location, emoji: newEmoji, items: [...newItems] });
+  } catch(e) {
+    alert('Erreur Firebase : ' + e.message + '\n\nVérifiez vos règles Firestore (mode test).');
+    if (btn) { btn.disabled=false; btn.textContent='Créer la boîte & générer le QR code'; }
+  }
+}
+
+function showCreateSuccess(box) {
+  const c = document.getElementById('content');
+  c.innerHTML = `
+    <div class="success-screen">
+      <div class="success-icon">
+        <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <div class="success-title">Boîte créée ! 🎉</div>
+      <div class="success-sub">"${h(box.name)}"${box.location?' · '+h(box.location):''} · ${box.items.length} objet${box.items.length!==1?'s':''}</div>
+      <div class="qr-print-block">
+        <div class="section-title" style="margin-bottom:12px">QR code à coller sur la boîte</div>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(box.id)}&margin=2" width="160" height="160" alt="QR code" onerror="this.outerHTML='<p style=color:var(--text3);font-size:12px>QR indisponible hors ligne</p>'">
+        <div class="qr-id" style="margin-bottom:8px">${box.id}</div>
+        <div class="hint">📄 Faites une capture d'écran ou imprimez ce QR code, puis collez-le sur la boîte. En le scannant, tout le monde verra son contenu en temps réel.</div>
+      </div>
+      <div class="success-btns">
+        <button class="btn-outline" onclick="newItems=[];newEmoji='📦';renderCreate(document.getElementById('content'))">Créer une autre boîte</button>
+        <button class="btn-teal" style="padding:12px" onclick="switchTab('boxes')">Voir toutes mes boîtes</button>
+      </div>
+    </div>`;
+}
+
+// ── UTILS ────────────────────────────────────────────
+function h(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
