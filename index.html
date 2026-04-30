@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=BoxScan&bgcolor=0F6E56&color=ffffff&margin=20">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -194,8 +194,8 @@ input[type=text],input[type=search],textarea{font-family:inherit}
 <div class="overlay" id="overlay" style="display:none" onclick="handleOverlayClick(event)">
   <div class="drawer" id="drawer"></div>
 </div>
+
 <script>
- let qrScanner = null;
 // ═══════════════════════════════════════════════════
 //  COLLE TA CONFIG FIREBASE ICI  (remplace chaque "...")
 // ═══════════════════════════════════════════════════
@@ -213,8 +213,7 @@ const EMOJIS = ['📦','🗃️','🧳','📚','🔧','👕','🖼️','🧸','�
 const LOCS   = ['Garage','Cave','Grenier','Chambre','Salon','Bureau','Cuisine','Couloir','Débarras','Entrée'];
 
 let db, boxes = {}, currentTab = 'boxes', selectedId = null;
-let scanning = false;
-let qrScanner = null;
+let scanning = false, stream = null, animFrame = null;
 let newEmoji = '📦', newItems = [], firebaseOk = false;
 
 // Init Firebase
@@ -429,7 +428,8 @@ function renderScanContent() {
     page.innerHTML = `
       <div class="scan-prompt"><h2>Scanner une boîte</h2><p>Pointez la caméra sur le QR code</p></div>
       <div class="video-box">
-        <div id="qr-reader" style="width:100%;max-width:320px;"></div>
+        <video id="sv" autoplay playsinline muted></video>
+        <canvas id="sc"></canvas>
         <div class="corners">
           <div class="corner tl"></div><div class="corner tr"></div>
           <div class="corner bl"></div><div class="corner br"></div>
@@ -439,6 +439,7 @@ function renderScanContent() {
       <button class="btn-outline" onclick="stopScanner()">Annuler</button>`;
     const v = document.getElementById('sv');
     if (v && stream) { v.srcObject = stream; v.play(); }
+    scanLoop();
     return;
   }
   page.innerHTML = `
@@ -455,49 +456,61 @@ function renderScanContent() {
       </div>
     </div>`;
 }
+
 async function startScanner() {
   scanning = true;
   renderScanContent();
-
-  qrScanner = new Html5Qrcode("qr-reader");
-
   try {
-    await qrScanner.start(
-      { facingMode: "environment" },
-      {
-        fps: 10,
-        qrbox: 250
-      },
-      (decodedText) => {
-        console.log("QR détecté :", decodedText);
-
-        stopScanner();
-
-        const found = boxes[decodedText];
-
-        showScanResult(
-          found ? found : null,
-          found ? 'found' : 'not_found',
-          decodedText
-        );
-      }
-    );
-  } catch (err) {
-    console.error(err);
+    stream = await navigator.mediaDevices.getUserMedia({
+  video: {
+    facingMode: { exact: "environment" },
+    width: { ideal: 1280 },
+    height: { ideal: 1280 }
+  }
+});
+    if (v) { v.srcObject = stream; await v.play(); }
+  } catch(e) {
+    scanning = false; stream = null;
     showScanResult(null, 'camera_error');
   }
 }
 
 function stopScanner() {
-  if (qrScanner) {
-    qrScanner.stop().then(() => {
-      qrScanner.clear();
-    });
-  }
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  if (stream) { stream.getTracks().forEach(t=>t.stop()); stream = null; }
   scanning = false;
   renderScanContent();
 }
-  
+
+function scanLoop() {
+  const v = document.getElementById('sv'), c = document.getElementById('sc');
+  if (!v || !c || !window.jsQR) { animFrame = requestAnimationFrame(scanLoop); return; }
+  if (v.readyState < v.HAVE_ENOUGH_DATA) { animFrame = requestAnimationFrame(scanLoop); return; }
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(v, 0, 0);
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  for (let i = 0; i < img.data.length; i += 4) {
+  const avg = (img.data[i] + img.data[i+1] + img.data[i+2]) / 3;
+  const val = avg > 128 ? 255 : 0;
+  img.data[i] = img.data[i+1] = img.data[i+2] = val;
+}
+
+const code = window.jsQR(img.data, img.width, img.height, {
+  inversionAttempts: "attemptBoth"
+});
+  console.log("scan en cours...");
+  if (code) {
+    console.log("QR détecté :", code.data);
+    const cleanId = code.data.trim();
+    stopScanner();
+    const found = boxes[cleanId];
+    showScanResult(found ? found : null, found ? 'found' : 'not_found', cleanId);
+  } else {
+    animFrame = requestAnimationFrame(scanLoop);
+  }
+}
+
 function manualLookup() {
   const id = document.getElementById('mid')?.value.trim();
   if (!id) return;
